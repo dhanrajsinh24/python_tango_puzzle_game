@@ -1,6 +1,7 @@
 #main script for tango puzzle game
 
 import pygame
+import asyncio
 
 #pygame setup
 pygame.init()
@@ -243,42 +244,49 @@ def has_different_adjacent_cell():
 def has_same_adjacent_cell():
     pass
 
-while running:
-    mouse_click_position = None # To store mouse click position
+async def main():
+    global running
+    
+    while running:
+        mouse_click_position = None # To store mouse click position
 
-    #poll for events
-    #pygame.QUIT means the user clicked X to close the window
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-        elif event.type == pygame.MOUSEBUTTONDOWN and not game_over:
-            if event.button == 1:
-                mouse_click_position = event.pos
+        #poll for events
+        #pygame.QUIT means the user clicked X to close the window
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN and not game_over:
+                if event.button == 1:
+                    mouse_click_position = event.pos
 
-    #flip() the display to put changes on screen
-    pygame.display.flip()
+        #flip() the display to put changes on screen
+        pygame.display.flip()
 
-    #fill the screen with a color to wipe away anything from last frame
-    screen.fill('white')
+        #fill the screen with a color to wipe away anything from last frame
+        screen.fill('white')
 
-    #RENDER THE GAME
-    screen.blit(GRID, (0, 0))
+        #RENDER THE GAME
+        screen.blit(GRID, (0, 0))
 
-    if not game_over:
-        play_turn(mouse_click_position)
+        if not game_over:
+            play_turn(mouse_click_position)
 
-    show_icons()
+        show_icons()
 
-    show_symbols()
+        show_symbols()
 
-    # Check for any rule break
-    check_game_status()
+        # Check for any rule break
+        check_game_status()
 
-    if rule_break: screen.blit(status_text, text_rect)
+        if rule_break: screen.blit(status_text, text_rect)
 
-    if game_over: screen.blit(status_text, text_rect)
+        if game_over: screen.blit(status_text, text_rect)
 
-    clock.tick(60) # limit FPS to 60
+        clock.tick(60) # limit FPS to 60
 
-pygame.quit()
+        await asyncio.sleep(0)
+
+    pygame.quit()
+
+asyncio.run(main())
 
