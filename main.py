@@ -1,334 +1,235 @@
-#main script for tango puzzle game
-
 import pygame
 import asyncio
 
-#pygame setup
+# Constants
+GRID_WIDTH = 512
+GRID_PADDING = 64
+CELL_WIDTH = 128
+ICON_WIDTH = GRID_WIDTH // 6
+SMALL_ICON_WIDTH = ICON_WIDTH // 4
+
+GRAY_COLOR = (128, 128, 128, 100)
+RED_COLOR = (255, 0, 0, 128)
+FONT_SIZE = 32
+
+# Pygame setup
 pygame.init()
-grid_width = 512
-grid_padding = 64
-cell_width = 128
-
-icon_width = grid_width // 6
-small_icon_width = icon_width // 4
-
-gray_color = (128, 128, 128, 100)
-red_color = (255, 0, 0, 128)
-
-screen = pygame.display.set_mode((grid_width + grid_padding * 2, grid_width + grid_padding * 2))
+screen = pygame.display.set_mode((GRID_WIDTH + GRID_PADDING * 2, GRID_WIDTH + GRID_PADDING * 2))
 clock = pygame.time.Clock()
-
-font = pygame.font.Font('freesansbold.ttf', 32)
-status_text = font.render('', True, 'green')
-text_rect = status_text.get_rect()
-# Center horizontally, and position vertically above the grid
-text_rect.center = (grid_padding, grid_padding // 2)
-
-running = True
-game_over = False
-rule_break = False
-
-def load_icon(path, resolution):
-    icon = pygame.image.load(path)
-    return pygame.transform.scale(icon, resolution)
-
-GRID = load_icon('graphics/grid.png', (grid_width, grid_width))
-ICON_BANANA = load_icon('graphics/banana.png', (icon_width, icon_width))
-ICON_ORANGE = load_icon('graphics/orange_2.png', (icon_width, icon_width))
-SYMBOL_CROSS = load_icon('graphics/cross.png', (small_icon_width, small_icon_width))
-SYMBOL_EQUAL = load_icon('graphics/equal.png', (small_icon_width, small_icon_width))
-
-board = [
-    [None, None, None, None, None, None],
-    [None, None, None, None, None, None],
-    [None, None, None, None, None, None],
-    [None, None, None, None, None, None],
-    [None, None, None, None, None, None],
-    [None, None, None, None, None, None]
-]
-
-# Set some fixed cells with initial values
-fixed_cells = [
-    (0, 2, 1), (0, 3, 1), (0, 5, 1),
-    (1, 1, 1),
-    (2, 0, 1),
-    (3, 0, 1),
-    (4, 1, 1),
-    (5, 2, 1), (5, 3, 1), (5, 5, 0)
-
-]  # (row, column, value)
-
-# Set fixed = and x symbols
-fixed_symbols = [
-    (1, 3, (1, 2)),
-    (2, 2, (1, 0)),
-    (3, 2, (1, 0)), (3, 3, (0, 1)),
-    (4, 3, (1, 0))
-] # (row, column, (right, down)) 0 = empty, 1 = cross, 2 = equal
-
-for row, column, value in fixed_cells:
-    board[row][column] = value
-
-# Example function to protect fixed cells (assuming you are applying this in-game logic)
-def is_cell_fixed(row, column):
-    return (row, column) in [(fc[0], fc[1]) for fc in fixed_cells]
-
-def has_symbols(row, column):
-    return (row, column) in [(fs[0], fs[1]) for fs in fixed_symbols]
-
-def show_symbols():
-    for row, column, (right, down) in fixed_symbols:
-        if right != 0:
-            symbol_x = icon_width * (column + 1) - small_icon_width // 2 + grid_padding
-            symbol_y = icon_width * row + icon_width // 2 - small_icon_width // 2 + grid_padding
-            screen.blit(SYMBOL_CROSS if right == 1 else SYMBOL_EQUAL, (symbol_x, symbol_y))
-        if down != 0:
-            symbol_x = icon_width * (column + 1) - icon_width // 2 - small_icon_width // 2 + grid_padding
-            symbol_y = icon_width * row + icon_width - small_icon_width // 2 + grid_padding
-            screen.blit(SYMBOL_CROSS if down == 1 else SYMBOL_EQUAL, (symbol_x, symbol_y))
+font = pygame.font.Font('freesansbold.ttf', FONT_SIZE)
 
 
-def show_icons():
-    for i, row in enumerate(board):
-        for j, column in enumerate(board[i]):
-            if board[i][j] is None: continue
+class AssetLoader:
+    """Class responsible for loading and scaling image assets."""
 
-            position_x = j * icon_width + grid_padding
-            position_y = i * icon_width + grid_padding
+    @staticmethod
+    def load_icon(path, resolution):
+        icon = pygame.image.load(path)
+        return pygame.transform.scale(icon, resolution)
 
-            if board[i][j] == 1:
-                screen.blit(ICON_ORANGE, (position_x, position_y))
-            elif board[i][j] == 0:
-                screen.blit(ICON_BANANA, (position_x, position_y))
 
-            if is_cell_fixed(i, j):
-                show_square(gray_color, (position_x, position_y))
+class GameBoard:
+    """Class representing the game board and handling its state and logic."""
 
-    # position_x =2 * icon_width + grid_x
-    # position_y = 2 * icon_width + grid_y
-    # show_square(red_color, (position_x, position_y))
+    def __init__(self):
+        self.board = [[None for _ in range(6)] for _ in range(6)]
+        self.fixed_cells = [
+            (0, 2, 1), (0, 3, 1), (0, 5, 1),
+            (1, 1, 1), (2, 0, 1), (3, 0, 1),
+            (4, 1, 1), (5, 2, 1), (5, 3, 1), (5, 5, 0)
+        ]
+        self.fixed_symbols = [
+            (1, 3, (1, 2)), (2, 2, (1, 0)),
+            (3, 2, (1, 0)), (3, 3, (0, 1)), (4, 3, (1, 0))
+        ]
+        self.rule_break = False
 
-def show_square(color_rgba, position):
-    # Create a transparent surface
-    red_square = pygame.Surface((icon_width, icon_width), pygame.SRCALPHA)
-    red_square.fill(color_rgba) # RGBA
+        # Load assets
+        self.grid_image = AssetLoader.load_icon('graphics/grid.png', (GRID_WIDTH, GRID_WIDTH))
+        self.icon_orange = AssetLoader.load_icon('graphics/orange_2.png', (ICON_WIDTH, ICON_WIDTH))
+        self.icon_banana = AssetLoader.load_icon('graphics/banana.png', (ICON_WIDTH, ICON_WIDTH))
+        self.symbol_cross = AssetLoader.load_icon('graphics/cross.png', (SMALL_ICON_WIDTH, SMALL_ICON_WIDTH))
+        self.symbol_equal = AssetLoader.load_icon('graphics/equal.png', (SMALL_ICON_WIDTH, SMALL_ICON_WIDTH))
 
-    screen.blit(red_square, (position[0], position[1]))
+        # Set fixed cell values
+        for row, column, value in self.fixed_cells:
+            self.board[row][column] = value
 
-def check_game_status():
-    global status_text, game_over
-    if has_rule_break():
-        status_text = font.render('Rule violated!', True, 'red')
+    def is_cell_fixed(self, row, column):
+        return (row, column) in [(fc[0], fc[1]) for fc in self.fixed_cells]
 
-    if grid_full() and not rule_break:
-        status_text = font.render('Level cleared!', True, 'green')
-        game_over = True
+    def has_symbols(self, row, column):
+        return (row, column) in [(fs[0], fs[1]) for fs in self.fixed_symbols]
 
-def play_turn(mouse_pos):
-    if mouse_pos:
-        # Adjust mouse position to account for padding
-        adjusted_pos = pygame.math.Vector2(mouse_pos) - pygame.math.Vector2(grid_padding, grid_padding)
-        print(adjusted_pos)
-        # Ensure that the click is within the bounds of the grid
-        if 0 <= adjusted_pos.x <= grid_width and 0 <= adjusted_pos.y <= grid_width:
-            current_coordinates = adjusted_pos // icon_width
-            print(current_coordinates)
-            column, row = map(int, current_coordinates)
-            if is_cell_fixed(row, column):
-                return
+    def get_board_value(self, row, column):
+        return self.board[row][column]
 
-            if board[row][column] is None:  # Check if the cell is empty
-                board[row][column] = 0
-            elif board[row][column] == 0:
-                board[row][column] = 1
-            else:
-                board[row][column] = None
+    def set_board_value(self, row, column, value):
+        self.board[row][column] = value
 
-    # Check for any rule break
-    check_game_status()
+    def draw_board(self, screen):
+        screen.blit(self.grid_image, (GRID_PADDING, GRID_PADDING))
+        for i, row in enumerate(self.board):
+            for j, value in enumerate(row):
+                if value is not None:
+                    self._draw_icon(screen, value, i, j)
+                if self.is_cell_fixed(i, j):
+                    self._draw_overlay(screen, i, j)
 
-def has_rule_break():
-    global rule_break
-    if has_three_adjacent_in_rows() or has_four_in_line() or has_three_adjacent_in_columns() \
-            or symbols_not_satisfied():
-        rule_break = True
-    else: rule_break = False
-    return rule_break
+    def draw_symbols(self, screen):
+        """Draw fixed symbols (= and X) on the board."""
+        for row, column, (right, down) in self.fixed_symbols:
+            if right != 0:
+                symbol_x = ICON_WIDTH * (column + 1) - SMALL_ICON_WIDTH // 2 + GRID_PADDING
+                symbol_y = ICON_WIDTH * row + ICON_WIDTH // 2 - SMALL_ICON_WIDTH // 2 + GRID_PADDING
+                symbol = self.symbol_cross if right == 1 else self.symbol_equal
+                screen.blit(symbol, (symbol_x, symbol_y))
+            if down != 0:
+                symbol_x = ICON_WIDTH * (column + 1) - ICON_WIDTH // 2 - SMALL_ICON_WIDTH // 2 + GRID_PADDING
+                symbol_y = ICON_WIDTH * row + ICON_WIDTH - SMALL_ICON_WIDTH // 2 + GRID_PADDING
+                symbol = self.symbol_cross if down == 1 else self.symbol_equal
+                screen.blit(symbol, (symbol_x, symbol_y))
 
-def symbols_not_satisfied():
-    for row, column, (right, down) in fixed_symbols:
-        if board[row][column] is None: continue
+    def _draw_icon(self, screen, value, row, column):
+        x = column * ICON_WIDTH + GRID_PADDING
+        y = row * ICON_WIDTH + GRID_PADDING
+        icon = self.icon_orange if value == 1 else self.icon_banana
+        screen.blit(icon, (x, y))
 
-        if down != 0:
-            if board[row + 1][column] is not None:
-                if down == 1:
-                    if board[row][column] == board[row + 1][column]:
-                        return True
-                elif down == 2:
-                    if board[row][column] != board[row + 1][column]:
-                        return True
+    def _draw_overlay(self, screen, row, column):
+        """Draw a gray overlay for fixed cells."""
+        x = column * ICON_WIDTH + GRID_PADDING
+        y = row * ICON_WIDTH + GRID_PADDING
+        overlay = pygame.Surface((ICON_WIDTH, ICON_WIDTH), pygame.SRCALPHA)
+        overlay.fill(GRAY_COLOR)
+        screen.blit(overlay, (x, y))
 
-        if right != 0:
-            if board[row][column + 1] is not None:
-                if right == 1:
-                    if board[row][column] == board[row][column + 1]:
-                        return True
-                elif right == 2:
-                    if board[row][column] != board[row][column  + 1]:
-                        return True
+    def check_game_status(self):
+        """Check if the game is over or if there's any rule break."""
+        if self.has_rule_break():
+            return "Rule violated!"
+        if self.is_grid_full() and not self.rule_break:
+            self.level_cleared = True
+            return "Level cleared!"
+        return None
+
+    def is_grid_full(self):
+        return all(self.is_row_full(i) for i in range(6))
+
+    def is_row_full(self, row):
+        return all(cell is not None for cell in self.board[row])
+
+    def has_rule_break(self):
+        self.rule_break = (
+                self.has_three_adjacent_in_rows() or self.has_three_adjacent_in_columns() or
+                self.symbols_not_satisfied() or self.has_four_in_line()
+        )
+        return self.rule_break
+
+    def symbols_not_satisfied(self):
+        for row, column, (right, down) in self.fixed_symbols:
+            value = self.board[row][column]
+            if value is None:
+                continue
+            if down != 0 and self.board[row + 1][column] is not None:
+                if (down == 1 and value == self.board[row + 1][column]) or \
+                        (down == 2 and value != self.board[row + 1][column]):
+                    return True
+            if right != 0 and self.board[row][column + 1] is not None:
+                if (right == 1 and value == self.board[row][column + 1]) or \
+                        (right == 2 and value != self.board[row][column + 1]):
+                    return True
         return False
 
-def grid_full():
-    for i in range(0, 6):
-        if not row_full(i): return False
-    return True
+    def has_three_adjacent_in_rows(self):
+        return any(self.has_three_adjacent(self.board[row]) for row in range(6))
 
-def row_full(row):
-    for cell in board[row]:
-        if cell is None: return False
-    return True
+    def has_three_adjacent_in_columns(self):
+        return any(self.has_three_adjacent([self.board[row][column] for row in range(6)]) for column in range(6))
 
-def has_three_adjacent_in_rows():
-    if has_three_adjacent(board[0]) or has_three_adjacent(board[1]) or has_three_adjacent(board[2]) \
-            or has_three_adjacent(board[3]) or has_three_adjacent(board[4]) or has_three_adjacent(board[5]):
-        return True
-    return False
+    def has_three_adjacent(self, cell_list):
+        last_cell = cell_list[0]
+        count = 1
 
-def has_three_adjacent_in_columns():
-    return has_three_adjacent_in_column(0) or has_three_adjacent_in_column(1) \
-            or has_three_adjacent_in_column(2) or has_three_adjacent_in_column(3) \
-            or has_three_adjacent_in_column(4) or has_three_adjacent_in_column(5)
+        for i in range(1, len(cell_list)):
+            cell = cell_list[i]
+            if cell is None:
+                count = 0  # Reset count when encountering None
+                continue
+            if cell == last_cell:
+                count += 1
+            else:
+                count = 1
+                last_cell = cell
+            if count >= 3:
+                return True
+        return False
 
-def has_three_adjacent_in_column(column):
-    cell_list = [
-        board[0][column], board[1][column],
-        board[2][column], board[3][column],
-        board[4][column], board[5][column]
-    ]
-    if has_three_adjacent(cell_list):
-        return True
-    return False
+    def has_four_in_line(self):
+        return self.has_four_in_rows() or any(self.has_four_in_column(column) for column in range(6))
 
-def has_three_adjacent(cell_list):
-    if len(cell_list) < 3:
-        return False  # Not enough cells to have three adjacent
+    def has_four_in_rows(self):
+        return any(self.has_four_or_more_in_list(self.board[row]) for row in range(6))
 
-    last_cell = cell_list[0]
-    count = 1
-    adjacent_cells = []
+    def has_four_in_column(self, column):
+        return self.has_four_or_more_in_list([self.board[row][column] for row in range(6)])
 
-    for i in range(1, len(cell_list)):
-        cell = cell_list[i]
+    def has_four_or_more_in_list(self, cell_list):
+        count_0 = cell_list.count(0)
+        count_1 = cell_list.count(1)
+        return count_0 >= 4 or count_1 >= 4
 
-        if cell is None:
-            count = 0  # Reset count when encountering None
-            continue
 
-        if cell == last_cell:
-            count += 1
-            adjacent_cells.append(cell)
-        else:
-            count = 1  # Reset count for a new sequence
-            adjacent_cells.clear()
-            last_cell = cell
+class Game:
+    """Class to handle the game loop, event handling, and rendering."""
 
-        if count >= 3:
-            # for j in enumerate(adjacent_cells):
-            #     position_x = j * icon_width + grid_padding
-            #     position_y = row * icon_width + grid_padding
-            #     show_square(red_color, (position_x, position_y))
-            return True
+    def __init__(self):
+        self.board = GameBoard()
+        self.running = True
+        self.game_over = False
+        self.status_text = ""
 
-    return False
+    def handle_event(self, event):
+        if event.type == pygame.QUIT:
+            self.running = False
+        elif event.type == pygame.MOUSEBUTTONDOWN and not self.game_over:
+            if event.button == 1:
+                self.handle_click(event.pos)
 
-def has_four_in_line():
-    if has_four_in_rows() or has_four_in_column(0) or has_four_in_column(1) \
-        or has_four_in_column(2) or has_four_in_column(3) \
-        or has_four_in_column(4) or has_four_in_column(5):
-        return True
-    return False
+    def handle_click(self, mouse_pos):
+        adjusted_pos = pygame.math.Vector2(mouse_pos) - pygame.math.Vector2(GRID_PADDING, GRID_PADDING)
+        if 0 <= adjusted_pos.x <= GRID_WIDTH and 0 <= adjusted_pos.y <= GRID_WIDTH:
+            column, row = map(int, adjusted_pos // ICON_WIDTH)
+            if not self.board.is_cell_fixed(row, column):
+                current_value = self.board.get_board_value(row, column)
+                next_value = 0 if current_value is None else (1 if current_value == 0 else None)
+                self.board.set_board_value(row, column, next_value)
+        self.update_game_status()
 
-def has_four_in_rows():
-    if has_four_or_more_in_list(board[0]) or has_four_or_more_in_list(board[1]) or has_four_or_more_in_list(board[2]) \
-        or has_four_or_more_in_list(board[3]) or has_four_or_more_in_list(board[4]) or has_four_or_more_in_list(board[5]):
-        return True
-    return False
+    def update_game_status(self):
+        self.status_text = self.board.check_game_status()
 
-def has_four_in_column(column):
-    cell_list = [
-        board[0][column], board[1][column],
-        board[2][column], board[3][column],
-        board[4][column], board[5][column]
-    ]
-    if has_four_or_more_in_list(cell_list):
-        return True
-    return False
+    def draw(self):
+        screen.fill((255, 255, 255))
+        self.board.draw_board(screen)
+        self.board.draw_symbols(screen)
+        self.draw_status()
+        pygame.display.update()
 
-def has_four_or_more_in_list(cell_list):
-    count_0 = 0
-    count_1 = 0
+    def draw_status(self):
+        if self.status_text:
+            text_color = RED_COLOR if "violated" in self.status_text else (0, 255, 0)
+            text_surf = font.render(self.status_text, True, text_color)
+            screen.blit(text_surf, (GRID_PADDING, GRID_WIDTH + GRID_PADDING // 2))
 
-    for item in cell_list:
-        if item == 0: count_0 += 1
-        elif item == 1: count_1 += 1
+    async def run(self):
+        while self.running:
+            for event in pygame.event.get():
+                self.handle_event(event)
+            self.draw()
+            await asyncio.sleep(0)
 
-    if count_0 >= 4 or count_1 >= 4:
-        return True
-    return False
 
-# def check_elements_are_equal(cell_list):
-#     if len(cell_list) < 2:
-#         return True  # If the list has 0 or 1 element, all elements are "equal" by default
-#
-#     first_element = cell_list[0]
-#     for i in range(1, len(cell_list)):
-#         if cell_list[i] != first_element:
-#             return False
-#     return True
-#
-# def has_different_adjacent_cell():
-#     pass
-#
-# def has_same_adjacent_cell():
-#     pass
-
-async def main():
-    global running
-    
-    while running:
-        mouse_click_position = None # To store mouse click position
-
-        #poll for events
-        #pygame.QUIT means the user clicked X to close the window
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN and not game_over:
-                if event.button == 1:
-                    mouse_click_position = event.pos
-
-        #fill the screen with a color to wipe away anything from last frame
-        screen.fill('white')
-
-        #RENDER THE GAME
-        screen.blit(GRID, (grid_padding, grid_padding))
-        if not game_over:
-            play_turn(mouse_click_position)
-
-        show_icons()
-        show_symbols()
-
-        if rule_break or game_over:
-            screen.blit(status_text, text_rect)
-
-        # flip() the display to put changes on screen
-        pygame.display.flip()
-
-        clock.tick(60) # limit FPS to 60
-
-        await asyncio.sleep(0)
-
-    pygame.quit()
-
-asyncio.run(main())
-
+if __name__ == "__main__":
+    game = Game()
+    asyncio.run(game.run())
