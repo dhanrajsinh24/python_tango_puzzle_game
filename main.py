@@ -5,17 +5,24 @@ import asyncio
 
 #pygame setup
 pygame.init()
-window_width = 512
-icon_width = window_width // 6
+grid_width = 512
+grid_padding = 64
+cell_width = 128
+
+icon_width = grid_width // 6
 small_icon_width = icon_width // 4
 
-screen = pygame.display.set_mode((window_width, window_width))
+gray_color = (128, 128, 128, 100)
+red_color = (255, 0, 0, 128)
+
+screen = pygame.display.set_mode((grid_width + grid_padding * 2, grid_width + grid_padding * 2))
 clock = pygame.time.Clock()
 
 font = pygame.font.Font('freesansbold.ttf', 32)
 status_text = font.render('', True, 'green')
 text_rect = status_text.get_rect()
-text_rect.center = (icon_width, window_width - icon_width)
+# Center horizontally, and position vertically above the grid
+text_rect.center = (grid_width // 2 - grid_padding * 2, grid_padding // 2)
 
 running = True
 game_over = False
@@ -25,7 +32,7 @@ def load_icon(path, resolution):
     icon = pygame.image.load(path)
     return pygame.transform.scale(icon, resolution)
 
-GRID = load_icon('graphics/grid.png', (window_width, window_width))
+GRID = load_icon('graphics/grid.png', (grid_width, grid_width))
 ICON_BANANA = load_icon('graphics/banana.png', (icon_width, icon_width))
 ICON_ORANGE = load_icon('graphics/orange_2.png', (icon_width, icon_width))
 SYMBOL_CROSS = load_icon('graphics/cross.png', (small_icon_width, small_icon_width))
@@ -72,31 +79,41 @@ def has_symbols(row, column):
 def show_symbols():
     for row, column, (right, down) in fixed_symbols:
         if right != 0:
-            screen.blit(SYMBOL_CROSS if right == 1 else SYMBOL_EQUAL, (icon_width * (column + 1) - small_icon_width // 2,
-                                       icon_width * row + icon_width // 2 - small_icon_width // 2))
+            symbol_x = icon_width * (column + 1) - small_icon_width // 2 + grid_padding
+            symbol_y = icon_width * row + icon_width // 2 - small_icon_width // 2 + grid_padding
+            screen.blit(SYMBOL_CROSS if right == 1 else SYMBOL_EQUAL, (symbol_x, symbol_y))
         if down != 0:
-            screen.blit(SYMBOL_CROSS if down == 1 else SYMBOL_EQUAL, (icon_width * (column + 1) - icon_width // 2 - small_icon_width // 2,
-                                       icon_width * row + icon_width - small_icon_width // 2))
+            symbol_x = icon_width * (column + 1) - icon_width // 2 - small_icon_width // 2 + grid_padding
+            symbol_y = icon_width * row + icon_width - small_icon_width // 2 + grid_padding
+            screen.blit(SYMBOL_CROSS if down == 1 else SYMBOL_EQUAL, (symbol_x, symbol_y))
+
 
 def show_icons():
     for i, row in enumerate(board):
         for j, column in enumerate(board[i]):
-            if board[i][j] == 1:
-                screen.blit(ICON_ORANGE, (j * icon_width, i * icon_width))
-            elif board[i][j] == 0:
-                screen.blit(ICON_BANANA, (j * icon_width, i * icon_width))
+            if board[i][j] is None: continue
 
-def play_turn(mouse_pos):
-    if mouse_pos:
-        current_coordinates = pygame.math.Vector2(pygame.mouse.get_pos()) // icon_width
-        # print(current_coordinates)
-        column, row = map(int, current_coordinates)
-        if is_cell_fixed(row, column): return
-        if board[row][column] is None: # Check if the cell is empty
-            board[row][column] = 0
-        elif board[row][column] == 0:
-            board[row][column] = 1
-        else: board[row][column] = None
+            position_x = j * icon_width + grid_padding
+            position_y = i * icon_width + grid_padding
+
+            if board[i][j] == 1:
+                screen.blit(ICON_ORANGE, (position_x, position_y))
+            elif board[i][j] == 0:
+                screen.blit(ICON_BANANA, (position_x, position_y))
+
+            if is_cell_fixed(i, j):
+                show_square(gray_color, (position_x, position_y))
+
+    # position_x =2 * icon_width + grid_x
+    # position_y = 2 * icon_width + grid_y
+    # show_square(red_color, (position_x, position_y))
+
+def show_square(color_rgba, position):
+    # Create a transparent surface
+    red_square = pygame.Surface((icon_width, icon_width), pygame.SRCALPHA)
+    red_square.fill(color_rgba) # RGBA
+
+    screen.blit(red_square, (position[0], position[1]))
 
 def check_game_status():
     global status_text, game_over
@@ -106,6 +123,29 @@ def check_game_status():
     if grid_full() and not rule_break:
         status_text = font.render('Game over', True, 'green')
         game_over = True
+
+def play_turn(mouse_pos):
+    if mouse_pos:
+        # Adjust mouse position to account for padding
+        adjusted_pos = pygame.math.Vector2(mouse_pos) - pygame.math.Vector2(grid_padding, grid_padding)
+        print(adjusted_pos)
+        # Ensure that the click is within the bounds of the grid
+        if 0 <= adjusted_pos.x <= grid_width and 0 <= adjusted_pos.y <= grid_width:
+            current_coordinates = adjusted_pos // icon_width
+            print(current_coordinates)
+            column, row = map(int, current_coordinates)
+            if is_cell_fixed(row, column):
+                return
+
+            if board[row][column] is None:  # Check if the cell is empty
+                board[row][column] = 0
+            elif board[row][column] == 0:
+                board[row][column] = 1
+            else:
+                board[row][column] = None
+
+    # Check for any rule break
+    check_game_status()
 
 def has_rule_break():
     global rule_break
@@ -228,21 +268,21 @@ def has_four_or_more_in_list(cell_list):
         return True
     return False
 
-def check_elements_are_equal(cell_list):
-    if len(list) < 2:
-        return True  # If the list has 0 or 1 element, all elements are "equal" by default
-
-    first_element = list[0]
-    for i in range(1, len(list)):
-        if list[i] != first_element:
-            return False
-    return True
-
-def has_different_adjacent_cell():
-    pass
-
-def has_same_adjacent_cell():
-    pass
+# def check_elements_are_equal(cell_list):
+#     if len(cell_list) < 2:
+#         return True  # If the list has 0 or 1 element, all elements are "equal" by default
+#
+#     first_element = cell_list[0]
+#     for i in range(1, len(cell_list)):
+#         if cell_list[i] != first_element:
+#             return False
+#     return True
+#
+# def has_different_adjacent_cell():
+#     pass
+#
+# def has_same_adjacent_cell():
+#     pass
 
 async def main():
     global running
@@ -266,21 +306,15 @@ async def main():
         screen.fill('white')
 
         #RENDER THE GAME
-        screen.blit(GRID, (0, 0))
-
+        screen.blit(GRID, (grid_padding, grid_padding))
         if not game_over:
             play_turn(mouse_click_position)
 
         show_icons()
-
         show_symbols()
 
-        # Check for any rule break
-        check_game_status()
-
-        if rule_break: screen.blit(status_text, text_rect)
-
-        if game_over: screen.blit(status_text, text_rect)
+        if rule_break or game_over:
+            screen.blit(status_text, text_rect)
 
         clock.tick(60) # limit FPS to 60
 
