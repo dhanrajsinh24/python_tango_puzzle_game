@@ -220,7 +220,7 @@ class Game:
         if self.status_text:
             text_color = RED_COLOR if "violated" in self.status_text else (0, 255, 0)
             text_surf = font.render(self.status_text, True, text_color)
-            screen.blit(text_surf, (GRID_PADDING, GRID_WIDTH + GRID_PADDING // 2))
+            screen.blit(text_surf, (GRID_PADDING, GRID_PADDING // 2))
 
     async def run(self):
         while self.running:
