@@ -22,7 +22,7 @@ font = pygame.font.Font('freesansbold.ttf', 32)
 status_text = font.render('', True, 'green')
 text_rect = status_text.get_rect()
 # Center horizontally, and position vertically above the grid
-text_rect.center = (grid_width // 2 - grid_padding * 2, grid_padding // 2)
+text_rect.center = (grid_padding, grid_padding // 2)
 
 running = True
 game_over = False
@@ -118,10 +118,10 @@ def show_square(color_rgba, position):
 def check_game_status():
     global status_text, game_over
     if has_rule_break():
-        status_text = font.render('Rules are not satisfied!', True, 'red')
+        status_text = font.render('Rule violated!', True, 'red')
 
     if grid_full() and not rule_break:
-        status_text = font.render('Game over', True, 'green')
+        status_text = font.render('Level cleared!', True, 'green')
         game_over = True
 
 def play_turn(mouse_pos):
@@ -189,7 +189,8 @@ def row_full(row):
     return True
 
 def has_three_adjacent_in_rows():
-    if has_three_adjacent(board[0]) or has_three_adjacent(board[1]) or has_three_adjacent(board[2]):
+    if has_three_adjacent(board[0]) or has_three_adjacent(board[1]) or has_three_adjacent(board[2]) \
+            or has_three_adjacent(board[3]) or has_three_adjacent(board[4]) or has_three_adjacent(board[5]):
         return True
     return False
 
@@ -214,6 +215,7 @@ def has_three_adjacent(cell_list):
 
     last_cell = cell_list[0]
     count = 1
+    adjacent_cells = []
 
     for i in range(1, len(cell_list)):
         cell = cell_list[i]
@@ -224,11 +226,17 @@ def has_three_adjacent(cell_list):
 
         if cell == last_cell:
             count += 1
+            adjacent_cells.append(cell)
         else:
             count = 1  # Reset count for a new sequence
+            adjacent_cells.clear()
             last_cell = cell
 
         if count >= 3:
+            # for j in enumerate(adjacent_cells):
+            #     position_x = j * icon_width + grid_padding
+            #     position_y = row * icon_width + grid_padding
+            #     show_square(red_color, (position_x, position_y))
             return True
 
     return False
@@ -299,9 +307,6 @@ async def main():
                 if event.button == 1:
                     mouse_click_position = event.pos
 
-        #flip() the display to put changes on screen
-        pygame.display.flip()
-
         #fill the screen with a color to wipe away anything from last frame
         screen.fill('white')
 
@@ -315,6 +320,9 @@ async def main():
 
         if rule_break or game_over:
             screen.blit(status_text, text_rect)
+
+        # flip() the display to put changes on screen
+        pygame.display.flip()
 
         clock.tick(60) # limit FPS to 60
 
