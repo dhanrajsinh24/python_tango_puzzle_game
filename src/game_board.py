@@ -1,32 +1,6 @@
 import pygame
-import asyncio
-
-# Constants
-GRID_WIDTH = 512
-GRID_PADDING = 64
-CELL_WIDTH = 128
-ICON_WIDTH = GRID_WIDTH // 6
-SMALL_ICON_WIDTH = ICON_WIDTH // 4
-
-GRAY_COLOR = (128, 128, 128, 100)
-RED_COLOR = (255, 0, 0, 128)
-FONT_SIZE = 32
-
-# Pygame setup
-pygame.init()
-screen = pygame.display.set_mode((GRID_WIDTH + GRID_PADDING * 2, GRID_WIDTH + GRID_PADDING * 2))
-clock = pygame.time.Clock()
-font = pygame.font.Font('freesansbold.ttf', FONT_SIZE)
-
-
-class AssetLoader:
-    """Class responsible for loading and scaling image assets."""
-
-    @staticmethod
-    def load_icon(path, resolution):
-        icon = pygame.image.load(path)
-        return pygame.transform.scale(icon, resolution)
-
+from asset_loader import AssetLoader
+from constants import GRID_WIDTH, ICON_WIDTH, SMALL_ICON_WIDTH, GRID_PADDING, GRAY_COLOR
 
 class GameBoard:
     """Class representing the game board and handling its state and logic."""
@@ -45,11 +19,11 @@ class GameBoard:
         self.rule_break = False
 
         # Load assets
-        self.grid_image = AssetLoader.load_icon('graphics/grid.png', (GRID_WIDTH, GRID_WIDTH))
-        self.icon_orange = AssetLoader.load_icon('graphics/orange_2.png', (ICON_WIDTH, ICON_WIDTH))
-        self.icon_banana = AssetLoader.load_icon('graphics/banana.png', (ICON_WIDTH, ICON_WIDTH))
-        self.symbol_cross = AssetLoader.load_icon('graphics/cross.png', (SMALL_ICON_WIDTH, SMALL_ICON_WIDTH))
-        self.symbol_equal = AssetLoader.load_icon('graphics/equal.png', (SMALL_ICON_WIDTH, SMALL_ICON_WIDTH))
+        self.grid_image = AssetLoader.load_icon('assets/graphics/grid.png', (GRID_WIDTH, GRID_WIDTH))
+        self.icon_orange = AssetLoader.load_icon('assets/graphics/orange.png', (ICON_WIDTH, ICON_WIDTH))
+        self.icon_banana = AssetLoader.load_icon('assets/graphics/banana.png', (ICON_WIDTH, ICON_WIDTH))
+        self.symbol_cross = AssetLoader.load_icon('assets/graphics/cross.png', (SMALL_ICON_WIDTH, SMALL_ICON_WIDTH))
+        self.symbol_equal = AssetLoader.load_icon('assets/graphics/equal.png', (SMALL_ICON_WIDTH, SMALL_ICON_WIDTH))
 
         # Set fixed cell values
         for row, column, value in self.fixed_cells:
@@ -178,58 +152,3 @@ class GameBoard:
         count_0 = cell_list.count(0)
         count_1 = cell_list.count(1)
         return count_0 >= 4 or count_1 >= 4
-
-
-class Game:
-    """Class to handle the game loop, event handling, and rendering."""
-
-    def __init__(self):
-        self.board = GameBoard()
-        self.running = True
-        self.game_over = False
-        self.status_text = ""
-
-    def handle_event(self, event):
-        if event.type == pygame.QUIT:
-            self.running = False
-        elif event.type == pygame.MOUSEBUTTONDOWN and not self.game_over:
-            if event.button == 1:
-                self.handle_click(event.pos)
-
-    def handle_click(self, mouse_pos):
-        adjusted_pos = pygame.math.Vector2(mouse_pos) - pygame.math.Vector2(GRID_PADDING, GRID_PADDING)
-        if 0 <= adjusted_pos.x <= GRID_WIDTH and 0 <= adjusted_pos.y <= GRID_WIDTH:
-            column, row = map(int, adjusted_pos // ICON_WIDTH)
-            if not self.board.is_cell_fixed(row, column):
-                current_value = self.board.get_board_value(row, column)
-                next_value = 0 if current_value is None else (1 if current_value == 0 else None)
-                self.board.set_board_value(row, column, next_value)
-        self.update_game_status()
-
-    def update_game_status(self):
-        self.status_text = self.board.check_game_status()
-
-    def draw(self):
-        screen.fill((255, 255, 255))
-        self.board.draw_board(screen)
-        self.board.draw_symbols(screen)
-        self.draw_status()
-        pygame.display.update()
-
-    def draw_status(self):
-        if self.status_text:
-            text_color = RED_COLOR if "violated" in self.status_text else (0, 255, 0)
-            text_surf = font.render(self.status_text, True, text_color)
-            screen.blit(text_surf, (GRID_PADDING, GRID_PADDING // 2))
-
-    async def run(self):
-        while self.running:
-            for event in pygame.event.get():
-                self.handle_event(event)
-            self.draw()
-            await asyncio.sleep(0)
-
-
-if __name__ == "__main__":
-    game = Game()
-    asyncio.run(game.run())
